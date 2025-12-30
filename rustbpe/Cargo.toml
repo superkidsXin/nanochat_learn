@@ -1,0 +1,16 @@
+[package]
+name = "rustbpe"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dary_heap = "0.3" #多叉堆
+indexmap = "2.2" #索引映射
+fancy-regex = "0.16.1" #正则表达式
+log = "0.4.28" #日志
+pyo3 = { version = "0.23.3", features = ["extension-module"] } #Python绑定
+pyo3-log = "0.12.4" #Python日志集成
+ahash = "0.8.12" #快速哈希
+rayon = "1.11.0" #并行计算
+compact_str = "0.9.0" #紧凑字符串
+
