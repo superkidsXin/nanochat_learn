@@ -1,6 +1,12 @@
 # nanochat_learn
 nanochat_learn
 
+
+# install
+```
+uv sync --extra gpu
+```
+
 ## 目标
 在单卡 3060 12GB 上跑通 `speedrun_1gpu_3060.sh` 全流程，并能从0复刻 nanochat 的四条主线：模型结构、训练工程、tokenizer、推理服务。
 ## 先跑通再深挖
