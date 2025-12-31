@@ -5,7 +5,9 @@ use pyo3::{buffer, prelude::*};
 use pyo3::{pyclass, pymethods, pymodule};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::cell::Ref;
+use std::clone;
 use std::collections::HashMap as StdHashMap;
+use std::thread::park_timeout;
 
 const GPT4_PATTERN: &str = r"'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+";
 type Pair = (u32, u32);
@@ -15,6 +17,64 @@ pub struct Tokenizer {
     pub merges: StdHashMap<Pair, u32>,
     pub pattern: String,
     compiled_pattern: Regex,
+}
+
+#[derive(Clone, Debug)]
+struct Word {
+    ids: Vec<u32>,
+}
+
+impl Word {
+    #[inline]
+    fn new(ids: Vec<u32>) -> Self {
+        Self { ids }
+    }
+
+    #[inline]
+    fn pairs<'a>(&'a self) -> impl Iterator<Item = Pair> + 'a {
+        self.ids.windows(2).map(|w| (w[0], w[1]))
+    }
+
+    fn merge_pair(&mut self, pair: Pair, new_id: u32) -> Vec<(Pair, i32)> {
+        let (a, b) = pair;
+        let n = self.ids.len();
+        if n < 2 {
+            return Vec::new();
+        }
+        let mut out: Vec<u32> = Vec::with_capacity(n);
+        let mut deltas: Vec<(Pair, i32)> = Vec::with_capacity(6);
+        let mut i = 0;
+        while i < n {
+            if i + 1 < n && self.ids[i] == a && self.ids[i + 1] == b {
+                let left = out.last().copied();
+                let right = if i + 2 < n {
+                    Some(self.ids[i + 2])
+                } else {
+                    None
+                };
+
+                // remove old pairs
+                if let Some(x) = left {
+                    deltas.push(((x, a), -1));
+                    deltas.push(((x, new_id), 1));
+                }
+                deltas.push(((a, b), -1));
+                if let Some(y) = right {
+                    deltas.push(((b, y), -1));
+                    deltas.push(((new_id, y), 1));
+                }
+
+                // write merged token
+                out.push(new_id);
+                i += 2; // skip 'a' and 'b'
+            } else {
+                out.push(self.ids[i]);
+                i += 1;
+            }
+        }
+        self.ids = out;
+        deltas
+    }
 }
 
 #[pymethods]
@@ -84,6 +144,7 @@ impl Tokenizer {
 
         loop {
             let exhuasted = refill(&mut buf)?;
+            // 没有数据，同时取尽了就break
             if buf.is_empty() && exhuasted {
                 break;
             }
@@ -122,6 +183,11 @@ impl Tokenizer {
             total_sequences,
             counts.len()
         );
+        let mut words = Vec::with_capacity(counts.len());
+        let mut cvec = Vec::with_capacity(counts.len());
+        for (chuck, c) in counts.into_iter() {
+            words.push(W);
+        }
 
         Ok(())
     }
